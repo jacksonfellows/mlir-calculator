@@ -19,3 +19,14 @@ cmake --build . --target mlir-doc
 ```
 **Note**: Make sure to pass `-DLLVM_INSTALL_UTILS=ON` when building LLVM with CMake in order to install `FileCheck` to the chosen installation prefix.
 
+## Usage
+
+`calculatorc` parses and compiles a single expression from `stdin`.
+It supports the standard operators `+`, `-`, `*`, `/`, and `^` (exponentiation), along with `(` and `)` for grouping.
+The precedence and associativity of these operators should behave as expected.
+Numbers are inputted as decimals, optionally with scientific notation (e.g. `3.5e4` for `35000`).
+Internally, all numbers are represented as `double`s.
+E.g. the following should compute and print `1022.75`:
+```sh
+echo '(2 - 3) * 5 / 4 + 4^5' | ./bin/calculatorc
+```

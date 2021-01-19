@@ -48,4 +48,4 @@ add_subdirectory(test)
 add_subdirectory(standalone-opt)
 add_subdirectory(standalone-translate)
 
-add_subdirectory(mathc)
+add_subdirectory(calculatorc)

@@ -39,4 +39,8 @@ def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
     }];
 }
 
+def Standalone_PrintOp : Standalone_Op<"print"> {
+    let arguments = (ins F64:$input);
+}
+
 #endif // STANDALONE_OPS

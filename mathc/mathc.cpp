@@ -1,4 +1,5 @@
 #include "mlir/Conversion/Passes.h"
+#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -7,12 +8,18 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR.h"
+#include "mlir/Transforms/Passes.h"
 
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include "Standalone/StandaloneDialect.h"
+#include "Standalone/StandaloneOps.h"
 
 #include <stdio.h>
 
@@ -59,6 +66,7 @@ Token nextToken() {
     return tok_div;
   case '^':
     return tok_pow;
+  case '0':
   case '1':
   case '2':
   case '3':
@@ -101,7 +109,7 @@ mlir::MLIRContext context;
 
 MLIRGenerator getGenerator() {
   context.getOrLoadDialect<mlir::StandardOpsDialect>();
-  context.getOrLoadDialect<mlir::LLVM::LLVMDialect>(); // need for printf
+  context.getOrLoadDialect<mlir::standalone::StandaloneDialect>();
   return MLIRGenerator(context);
 }
 
@@ -195,62 +203,6 @@ mlir::Value expr(int rbp) {
   return left;
 }
 
-// taken from Toy tutorial
-
-/// Return a symbol reference to the printf function, inserting it into the
-/// module if necessary.
-mlir::FlatSymbolRefAttr getOrInsertPrintf(mlir::OpBuilder &builder,
-                                          mlir::ModuleOp module) {
-  auto *context = module.getContext();
-  if (module.lookupSymbol<mlir::LLVM::LLVMFuncOp>("printf"))
-    return mlir::SymbolRefAttr::get("printf", context);
-
-  // Create a function declaration for printf, the signature is:
-  //   * `i32 (i8*, ...)`
-  auto llvmI32Ty = mlir::LLVM::LLVMIntegerType::get(context, 32);
-  auto llvmI8PtrTy = mlir::LLVM::LLVMPointerType::get(
-      mlir::LLVM::LLVMIntegerType::get(context, 8));
-  auto llvmFnType = mlir::LLVM::LLVMFunctionType::get(llvmI32Ty, llvmI8PtrTy,
-                                                      /*isVarArg=*/true);
-
-  // Insert the printf function into the body of the parent module.
-  mlir::PatternRewriter::InsertionGuard insertGuard(builder);
-  builder.setInsertionPointToStart(module.getBody());
-  builder.create<mlir::LLVM::LLVMFuncOp>(module.getLoc(), "printf", llvmFnType);
-  return mlir::SymbolRefAttr::get("printf", context);
-}
-
-/// Return a value representing an access into a global string with the given
-/// name, creating the string if necessary.
-mlir::Value getOrCreateGlobalString(mlir::Location loc,
-                                    mlir::OpBuilder &builder,
-                                    llvm::StringRef name, llvm::StringRef value,
-                                    mlir::ModuleOp module) {
-  // Create the global at the entry of the module.
-  mlir::LLVM::GlobalOp global;
-  if (!(global = module.lookupSymbol<mlir::LLVM::GlobalOp>(name))) {
-    mlir::OpBuilder::InsertionGuard insertGuard(builder);
-    builder.setInsertionPointToStart(module.getBody());
-    auto type = mlir::LLVM::LLVMArrayType::get(
-        mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8),
-        value.size());
-    global = builder.create<mlir::LLVM::GlobalOp>(
-        loc, type, /*isConstant=*/true, mlir::LLVM::Linkage::Internal, name,
-        builder.getStringAttr(value));
-  }
-
-  // Get the pointer to the first character in the global string.
-  mlir::Value globalPtr = builder.create<mlir::LLVM::AddressOfOp>(loc, global);
-  mlir::Value cst0 = builder.create<mlir::LLVM::ConstantOp>(
-      loc, mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 64),
-      builder.getIntegerAttr(builder.getIndexType(), 0));
-  return builder.create<mlir::LLVM::GEPOp>(
-      loc,
-      mlir::LLVM::LLVMPointerType::get(
-          mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8)),
-      globalPtr, llvm::ArrayRef<mlir::Value>({cst0, cst0}));
-}
-
 void parse() {
   mlir::FuncOp mainFunc = mlir::FuncOp::create(
       getLoc(), "main",
@@ -261,13 +213,7 @@ void parse() {
   token = nextToken();
   mlir::Value result = expr();
 
-  mlir::FlatSymbolRefAttr printfRef =
-      getOrInsertPrintf(generator.builder, generator.theModule);
-  mlir::Value fmt = getOrCreateGlobalString(getLoc(), generator.builder, "fmt",
-                                            "%lf\n", generator.theModule);
-  generator.builder.create<mlir::CallOp>(
-      getLoc(), printfRef, generator.builder.getI32Type(),
-      llvm::ArrayRef<mlir::Value>({fmt, result}));
+  generator.builder.create<mlir::standalone::PrintOp>(getLoc(), result);
 
   generator.builder.create<mlir::ReturnOp>(getLoc());
 
@@ -331,21 +277,157 @@ int dumpLLVMIR(mlir::ModuleOp module) {
   return 0;
 }
 
+class PrintOpLowering : public mlir::ConversionPattern {
+public:
+  explicit PrintOpLowering(mlir::MLIRContext *context)
+      : ConversionPattern(mlir::standalone::PrintOp::getOperationName(), 1,
+                          context) {}
+
+  mlir::LogicalResult
+  matchAndRewrite(mlir::Operation *op, llvm::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const override {
+    auto loc = op->getLoc();
+
+    mlir::ModuleOp parentModule = op->getParentOfType<mlir::ModuleOp>();
+
+    // Get a symbol reference to the printf function, inserting it if necessary.
+    auto printfRef = getOrInsertPrintf(rewriter, parentModule);
+    mlir::Value formatSpecifierCst = getOrCreateGlobalString(
+        loc, rewriter, "frmt_spec", "%lf\n", parentModule);
+
+    // Generate a call to printf for the current element of the loop.
+    auto printOp = llvm::cast<mlir::standalone::PrintOp>(op);
+    rewriter.create<mlir::CallOp>(
+        loc, printfRef, rewriter.getIntegerType(32),
+        llvm::ArrayRef<mlir::Value>({formatSpecifierCst, printOp.input()}));
+
+    // Notify the rewriter that this operation has been removed.
+    rewriter.eraseOp(op);
+    return mlir::success();
+  }
+
+private:
+  /// Return a symbol reference to the printf function, inserting it into the
+  /// module if necessary.
+  static mlir::FlatSymbolRefAttr
+  getOrInsertPrintf(mlir::PatternRewriter &rewriter, mlir::ModuleOp module) {
+    auto *context = module.getContext();
+    if (module.lookupSymbol<mlir::LLVM::LLVMFuncOp>("printf"))
+      return mlir::SymbolRefAttr::get("printf", context);
+
+    // Create a function declaration for printf, the signature is:
+    //   * `i32 (i8*, ...)`
+    auto llvmI32Ty = mlir::LLVM::LLVMIntegerType::get(context, 32);
+    auto llvmI8PtrTy = mlir::LLVM::LLVMPointerType::get(
+        mlir::LLVM::LLVMIntegerType::get(context, 8));
+    auto llvmFnType = mlir::LLVM::LLVMFunctionType::get(llvmI32Ty, llvmI8PtrTy,
+                                                        /*isVarArg=*/true);
+
+    // Insert the printf function into the body of the parent module.
+    mlir::PatternRewriter::InsertionGuard insertGuard(rewriter);
+    rewriter.setInsertionPointToStart(module.getBody());
+    rewriter.create<mlir::LLVM::LLVMFuncOp>(module.getLoc(), "printf",
+                                            llvmFnType);
+    return mlir::SymbolRefAttr::get("printf", context);
+  }
+
+  /// Return a value representing an access into a global string with the given
+  /// name, creating the string if necessary.
+  static mlir::Value getOrCreateGlobalString(mlir::Location loc,
+                                             mlir::OpBuilder &builder,
+                                             llvm::StringRef name,
+                                             llvm::StringRef value,
+                                             mlir::ModuleOp module) {
+    // Create the global at the entry of the module.
+    mlir::LLVM::GlobalOp global;
+    if (!(global = module.lookupSymbol<mlir::LLVM::GlobalOp>(name))) {
+      mlir::OpBuilder::InsertionGuard insertGuard(builder);
+      builder.setInsertionPointToStart(module.getBody());
+      auto type = mlir::LLVM::LLVMArrayType::get(
+          mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8),
+          value.size());
+      global = builder.create<mlir::LLVM::GlobalOp>(
+          loc, type, /*isConstant=*/true, mlir::LLVM::Linkage::Internal, name,
+          builder.getStringAttr(value));
+    }
+
+    // Get the pointer to the first character in the global string.
+    mlir::Value globalPtr =
+        builder.create<mlir::LLVM::AddressOfOp>(loc, global);
+    mlir::Value cst0 = builder.create<mlir::LLVM::ConstantOp>(
+        loc, mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 64),
+        builder.getIntegerAttr(builder.getIndexType(), 0));
+    return builder.create<mlir::LLVM::GEPOp>(
+        loc,
+        mlir::LLVM::LLVMPointerType::get(
+            mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8)),
+        globalPtr, llvm::ArrayRef<mlir::Value>({cst0, cst0}));
+  }
+};
+
+namespace {
+struct MathToLLVMLoweringPass
+    : public mlir::PassWrapper<MathToLLVMLoweringPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<mlir::LLVM::LLVMDialect>();
+  }
+  void runOnOperation() final;
+};
+} // end anonymous namespace
+
+void MathToLLVMLoweringPass::runOnOperation() {
+  // The first thing to define is the conversion target. This will define the
+  // final target for this lowering. For this lowering, we are only targeting
+  // the LLVM dialect.
+  mlir::LLVMConversionTarget target(getContext());
+  target.addLegalOp<mlir::ModuleOp, mlir::ModuleTerminatorOp>();
+
+  mlir::LLVMTypeConverter typeConverter(&getContext());
+
+  mlir::OwningRewritePatternList patterns;
+  populateStdToLLVMConversionPatterns(typeConverter, patterns);
+
+  patterns.insert<PrintOpLowering>(&getContext());
+
+  // We want to completely lower to LLVM, so we use a `FullConversion`. This
+  // ensures that only legal operations will remain after the conversion.
+  auto module = getOperation();
+  if (failed(applyFullConversion(module, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
+  return std::make_unique<MathToLLVMLoweringPass>();
+}
+
 int main(int argc, char **argv) {
   parse();
   if (failed(mlir::verify(generator.theModule))) {
     generator.theModule.emitError("module failed to verify");
-    // return 1;
+    return 1;
   }
 
   // dump MLIR
   // TODO can I dump with loc info?
   generator.theModule.dump();
 
-  // lower to LLVM IR
-  mlir::PassManager pm(&context);
-  pm.addPass(mlir::createLowerToLLVMPass());
-  if (mlir::failed(pm.run(generator.theModule)))
+  // perform canonicalization
+  mlir::PassManager pm1(&context);
+
+  mlir::OpPassManager &optPM = pm1.nest<mlir::FuncOp>();
+  optPM.addPass(mlir::createCanonicalizerPass());
+
+  if (mlir::failed(pm1.run(generator.theModule)))
+    return 1;
+
+  generator.theModule.dump();
+
+  // convert to LLVM IR
+  mlir::PassManager pm2(&context);
+  pm2.addPass(createLowerToLLVMPass());
+
+  if (mlir::failed(pm2.run(generator.theModule)))
     return 1;
 
   if (failed(mlir::verify(generator.theModule))) {

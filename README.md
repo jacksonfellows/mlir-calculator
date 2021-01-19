@@ -1,14 +1,17 @@
-# An out-of-tree MLIR dialect
+# A simple calculator implemented with MLIR
 
-This is an example of an out-of-tree [MLIR](https://mlir.llvm.org/) dialect along with a standalone `opt`-like tool to operate on that dialect.
+This is an example of simple calculator implemented using [MLIR](https://mlir.llvm.org/).
 
 ## Building
 
-This setup assumes that you have built LLVM and MLIR in `$BUILD_DIR` and installed them to `$PREFIX`. To build and launch the tests, run
+This setup assumes that you have built LLVM and MLIR in `$BUILD_DIR` and installed them to `$PREFIX`. To setup CMake to build the project, run
 ```sh
 mkdir build && cd build
 cmake -G Ninja .. -DMLIR_DIR=$PREFIX/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=$BUILD_DIR/bin/llvm-lit
-cmake --build . --target check-standalone
+```
+To build `calculatorc` (the calculator compiler), run
+```sh
+cmake --build . --target calculatorc
 ```
 To build the documentation from the TableGen description of the dialect operations, run
 ```sh

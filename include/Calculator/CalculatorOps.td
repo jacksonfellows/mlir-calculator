@@ -1,4 +1,4 @@
-//===- StandaloneOps.td - Standalone dialect ops -----------*- tablegen -*-===//
+//===- CalculatorOps.td - Calculator dialect ops -----------*- tablegen -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,17 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef STANDALONE_OPS
-#define STANDALONE_OPS
+#ifndef CALCULATOR_OPS
+#define CALCULATOR_OPS
 
-include "StandaloneDialect.td"
+include "CalculatorDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
+def Calculator_FooOp : Calculator_Op<"foo", [NoSideEffect,
                                              SameOperandsAndResultType]> {
     let summary = "Illustrates how to define an operation.";
     let description = [{
-        The `standalone.foo` operation illustrates how to define a new
+        The `calculator.foo` operation illustrates how to define a new
         operation in a dialect. It uses an operation trait to declare that it
         has no side effects.
 
@@ -27,7 +27,7 @@ def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
         ```mlir
         %0 = constant 2 : i32
         // Apply the foo operation to %0
-        %1 = standalone.foo %0 : i32
+        %1 = calculator.foo %0 : i32
         ```
     }];
 
@@ -39,8 +39,8 @@ def Standalone_FooOp : Standalone_Op<"foo", [NoSideEffect,
     }];
 }
 
-def Standalone_PrintOp : Standalone_Op<"print"> {
+def Calculator_PrintOp : Calculator_Op<"print"> {
     let arguments = (ins F64:$input);
 }
 
-#endif // STANDALONE_OPS
+#endif // CALCULATOR_OPS

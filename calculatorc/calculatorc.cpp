@@ -18,8 +18,8 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "Standalone/StandaloneDialect.h"
-#include "Standalone/StandaloneOps.h"
+#include "Calculator/CalculatorDialect.h"
+#include "Calculator/CalculatorOps.h"
 
 #include <stdio.h>
 
@@ -109,7 +109,7 @@ mlir::MLIRContext context;
 
 MLIRGenerator getGenerator() {
   context.getOrLoadDialect<mlir::StandardOpsDialect>();
-  context.getOrLoadDialect<mlir::standalone::StandaloneDialect>();
+  context.getOrLoadDialect<mlir::calculator::CalculatorDialect>();
   return MLIRGenerator(context);
 }
 
@@ -213,7 +213,7 @@ void parse() {
   token = nextToken();
   mlir::Value result = expr();
 
-  generator.builder.create<mlir::standalone::PrintOp>(getLoc(), result);
+  generator.builder.create<mlir::calculator::PrintOp>(getLoc(), result);
 
   generator.builder.create<mlir::ReturnOp>(getLoc());
 
@@ -280,7 +280,7 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 class PrintOpLowering : public mlir::ConversionPattern {
 public:
   explicit PrintOpLowering(mlir::MLIRContext *context)
-      : ConversionPattern(mlir::standalone::PrintOp::getOperationName(), 1,
+      : ConversionPattern(mlir::calculator::PrintOp::getOperationName(), 1,
                           context) {}
 
   mlir::LogicalResult
@@ -296,7 +296,7 @@ public:
         loc, rewriter, "frmt_spec", "%lf\n", parentModule);
 
     // Generate a call to printf for the current element of the loop.
-    auto printOp = llvm::cast<mlir::standalone::PrintOp>(op);
+    auto printOp = llvm::cast<mlir::calculator::PrintOp>(op);
     rewriter.create<mlir::CallOp>(
         loc, printfRef, rewriter.getIntegerType(32),
         llvm::ArrayRef<mlir::Value>({formatSpecifierCst, printOp.input()}));

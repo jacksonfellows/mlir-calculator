@@ -1,4 +1,4 @@
-//===- StandaloneDialect.cpp - Standalone dialect ---------------*- C++ -*-===//
+//===- CalculatorDialect.cpp - Calculator dialect ---------------*- C++ -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,19 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Standalone/StandaloneDialect.h"
-#include "Standalone/StandaloneOps.h"
+#include "Calculator/CalculatorDialect.h"
+#include "Calculator/CalculatorOps.h"
 
 using namespace mlir;
-using namespace mlir::standalone;
+using namespace mlir::calculator;
 
 //===----------------------------------------------------------------------===//
-// Standalone dialect.
+// Calculator dialect.
 //===----------------------------------------------------------------------===//
 
-void StandaloneDialect::initialize() {
+void CalculatorDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "Standalone/StandaloneOps.cpp.inc"
+#include "Calculator/CalculatorOps.cpp.inc"
       >();
 }

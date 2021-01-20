@@ -353,9 +353,9 @@ private:
 
     // Create a function declaration for printf, the signature is:
     //   * `i32 (i8*, ...)`
-    auto llvmI32Ty = mlir::LLVM::LLVMIntegerType::get(context, 32);
-    auto llvmI8PtrTy = mlir::LLVM::LLVMPointerType::get(
-        mlir::LLVM::LLVMIntegerType::get(context, 8));
+    auto llvmI32Ty = mlir::IntegerType::get(context, 32);
+    auto llvmI8PtrTy =
+        mlir::LLVM::LLVMPointerType::get(mlir::IntegerType::get(context, 8));
     auto llvmFnType = mlir::LLVM::LLVMFunctionType::get(llvmI32Ty, llvmI8PtrTy,
                                                         /*isVarArg=*/true);
 
@@ -380,8 +380,7 @@ private:
       mlir::OpBuilder::InsertionGuard insertGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
       auto type = mlir::LLVM::LLVMArrayType::get(
-          mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8),
-          value.size());
+          mlir::IntegerType::get(builder.getContext(), 8), value.size());
       global = builder.create<mlir::LLVM::GlobalOp>(
           loc, type, /*isConstant=*/true, mlir::LLVM::Linkage::Internal, name,
           builder.getStringAttr(value));
@@ -391,12 +390,12 @@ private:
     mlir::Value globalPtr =
         builder.create<mlir::LLVM::AddressOfOp>(loc, global);
     mlir::Value cst0 = builder.create<mlir::LLVM::ConstantOp>(
-        loc, mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 64),
+        loc, mlir::IntegerType::get(builder.getContext(), 64),
         builder.getIntegerAttr(builder.getIndexType(), 0));
     return builder.create<mlir::LLVM::GEPOp>(
         loc,
         mlir::LLVM::LLVMPointerType::get(
-            mlir::LLVM::LLVMIntegerType::get(builder.getContext(), 8)),
+            mlir::IntegerType::get(builder.getContext(), 8)),
         globalPtr, llvm::ArrayRef<mlir::Value>({cst0, cst0}));
   }
 };

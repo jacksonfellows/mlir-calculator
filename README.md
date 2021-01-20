@@ -21,6 +21,7 @@ cmake --build . --target mlir-doc
 
 ## Usage
 
+### Compile math expressions
 `calculatorc` parses and compiles a single expression from `stdin`.
 It supports the standard operators `+`, `-`, `*`, `/`, and `^` (exponentiation), along with `(` and `)` for grouping.
 The precedence and associativity of these operators should behave as expected.
@@ -30,3 +31,7 @@ E.g. the following should compute and print `1022.75`:
 ```sh
 echo '(2 - 3) * 5 / 4 + 4^5' | ./bin/calculatorc
 ```
+
+### Helpful options
+To include location information (i.e. line/column numbers) in the MLIR output, add the flag `--mlir-print-debuginfo`.
+To view all options, use `--help`.

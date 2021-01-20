@@ -2,12 +2,9 @@
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
@@ -22,19 +19,10 @@
 
 #include "Calculator/CalculatorDialect.h"
 #include "Calculator/CalculatorOps.h"
+#include "Calculator/Generator.h"
 #include "Calculator/Lexer.h"
 
 // parser/MLIR generator
-
-class MLIRGenerator {
-public:
-  mlir::ModuleOp theModule;
-  mlir::OpBuilder builder;
-
-  MLIRGenerator(mlir::MLIRContext &context) : builder(&context) {
-    theModule = mlir::ModuleOp::create(builder.getUnknownLoc());
-  }
-};
 
 mlir::MLIRContext context;
 

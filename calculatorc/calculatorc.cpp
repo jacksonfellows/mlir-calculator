@@ -51,6 +51,29 @@ enum Token {
   tok_eof
 };
 
+llvm::StringRef tokToString(Token t) {
+  switch (t) {
+  case tok_add:
+    return "+";
+  case tok_sub:
+    return "-";
+  case tok_mul:
+    return "*";
+  case tok_div:
+    return "/";
+  case tok_pow:
+    return "^";
+  case tok_num:
+    return "[number]";
+  case tok_lparen:
+    return "(";
+  case tok_rparen:
+    return ")";
+  case tok_eof:
+    return "EOF";
+  }
+}
+
 double currentNum;
 
 Token nextToken() {
@@ -148,7 +171,9 @@ mlir::Value expr(int rbp = 0);
 
 void match(Token t) {
   if (t != token) {
-    llvm::errs() << "Expected other token.\n";
+    llvm::errs() << "Expected token " << tokToString(t)
+                 << ", instead encountered token " << tokToString(token)
+                 << "\n";
     exit(1);
   }
   token = nextToken();
@@ -173,11 +198,12 @@ mlir::Value nud(Token t, mlir::Location loc) {
     match(tok_rparen);
     return x;
   default:
-    llvm::errs() << "No prefix handler for token.\n";
+    llvm::errs() << "No prefix handler for token " << tokToString(t) << "\n";
     exit(1);
   }
 }
 
+// infix handler
 mlir::Value led(Token t, mlir::Value left, mlir::Location loc) {
   switch (t) {
   case tok_add:
@@ -191,7 +217,7 @@ mlir::Value led(Token t, mlir::Value left, mlir::Location loc) {
   case tok_pow:
     return generator.builder.create<mlir::PowFOp>(loc, left, expr(29));
   default:
-    llvm::errs() << "No infix handler for token.\n";
+    llvm::errs() << "No infix handler for token " << tokToString(t) << ".\n";
     exit(1);
   }
 }
@@ -219,8 +245,8 @@ void parse() {
   generator.builder.setInsertionPointToStart(&entryBlock);
 
   token = nextToken();
-
   mlir::Value result = expr();
+  match(tok_eof); // consume all available input
 
   generator.builder.create<mlir::calculator::PrintOp>(
       generator.builder.getUnknownLoc(), result);

@@ -25,26 +25,7 @@ class Parser {
 public:
   Parser(mlir::MLIRContext &context) : generator(context) {}
 
-  mlir::ModuleOp parse() {
-    mlir::FuncOp mainFunc = mlir::FuncOp::create(
-        generator.builder.getUnknownLoc(), "main",
-        generator.builder.getFunctionType(llvm::None, llvm::None));
-    mlir::Block &entryBlock = *mainFunc.addEntryBlock();
-    generator.builder.setInsertionPointToStart(&entryBlock);
-
-    token = nextToken();
-    mlir::Value result = expr();
-    match(tok_eof); // consume all available input
-
-    generator.builder.create<mlir::calculator::PrintOp>(
-        generator.builder.getUnknownLoc(), result);
-
-    generator.builder.create<mlir::ReturnOp>(generator.builder.getUnknownLoc());
-
-    generator.theModule.push_back(mainFunc);
-
-    return generator.theModule;
-  }
+  mlir::ModuleOp parse();
 };
 
 #endif // PARSER_H

@@ -5,7 +5,7 @@
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
-#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Verifier.h"
@@ -17,135 +17,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "Calculator/CalculatorDialect.h"
-#include "Calculator/CalculatorOps.h"
-#include "Calculator/Generator.h"
-#include "Calculator/Lexer.h"
-
-// parser/MLIR generator
-
-mlir::MLIRContext context;
-
-MLIRGenerator getGenerator() {
-  context.getOrLoadDialect<mlir::StandardOpsDialect>();
-  context.getOrLoadDialect<mlir::calculator::CalculatorDialect>();
-  return MLIRGenerator(context);
-}
-
-MLIRGenerator generator = getGenerator();
-
-// the left binding power of a token
-int lbp(Token t) {
-  switch (t) {
-  case tok_num:
-    return 0; // doesn't make sense
-  case tok_add:
-  case tok_sub:
-    return 10;
-  case tok_mul:
-  case tok_div:
-    return 20;
-  case tok_pow:
-    return 30;
-  case tok_lparen:
-    return 0;
-  case tok_rparen:
-    return 0;
-  case tok_eof:
-    return 0;
-  }
-}
-
-Token token;
-
-mlir::Value expr(int rbp = 0);
-
-void match(Token t) {
-  if (t != token) {
-    llvm::errs() << "Expected token " << tokToString(t)
-                 << ", instead encountered token " << tokToString(token)
-                 << "\n";
-    exit(1);
-  }
-  token = nextToken();
-}
-
-mlir::Location getLoc() {
-  return generator.builder.getFileLineColLoc(
-      generator.builder.getIdentifier("-"), getCurrentLine(), getLastCol());
-}
-
-// prefix handler
-mlir::Value nud(Token t, mlir::Location loc) {
-  mlir::Value x;
-  switch (t) {
-  case tok_num:
-    return generator.builder.create<mlir::ConstantFloatOp>(
-        loc, llvm::APFloat(getCurrentNum()), generator.builder.getF64Type());
-  case tok_sub:
-    return generator.builder.create<mlir::NegFOp>(loc, expr(100));
-  case tok_lparen:
-    x = expr();
-    match(tok_rparen);
-    return x;
-  default:
-    llvm::errs() << "No prefix handler for token " << tokToString(t) << "\n";
-    exit(1);
-  }
-}
-
-// infix handler
-mlir::Value led(Token t, mlir::Value left, mlir::Location loc) {
-  switch (t) {
-  case tok_add:
-    return generator.builder.create<mlir::AddFOp>(loc, left, expr(10));
-  case tok_sub:
-    return generator.builder.create<mlir::SubFOp>(loc, left, expr(10));
-  case tok_mul:
-    return generator.builder.create<mlir::MulFOp>(loc, left, expr(20));
-  case tok_div:
-    return generator.builder.create<mlir::DivFOp>(loc, left, expr(20));
-  case tok_pow:
-    return generator.builder.create<mlir::PowFOp>(loc, left, expr(29));
-  default:
-    llvm::errs() << "No infix handler for token " << tokToString(t) << ".\n";
-    exit(1);
-  }
-}
-
-mlir::Value expr(int rbp) {
-  Token t = token;
-  mlir::Location loc = getLoc();
-  token = nextToken();
-  mlir::Value left = nud(t, loc);
-  while (rbp < lbp(token)) {
-    t = token;
-    mlir::Location loc = getLoc();
-    token = nextToken();
-
-    left = led(t, left, loc);
-  }
-  return left;
-}
-
-void parse() {
-  mlir::FuncOp mainFunc = mlir::FuncOp::create(
-      generator.builder.getUnknownLoc(), "main",
-      generator.builder.getFunctionType(llvm::None, llvm::None));
-  mlir::Block &entryBlock = *mainFunc.addEntryBlock();
-  generator.builder.setInsertionPointToStart(&entryBlock);
-
-  token = nextToken();
-  mlir::Value result = expr();
-  match(tok_eof); // consume all available input
-
-  generator.builder.create<mlir::calculator::PrintOp>(
-      generator.builder.getUnknownLoc(), result);
-
-  generator.builder.create<mlir::ReturnOp>(generator.builder.getUnknownLoc());
-
-  generator.theModule.push_back(mainFunc);
-}
+#include "Calculator/Parser.h"
 
 bool enableOpt = 1;
 
@@ -332,15 +204,21 @@ int main(int argc, char **argv) {
 
   llvm::cl::ParseCommandLineOptions(argc, argv, "calculator compiler\n");
 
-  parse();
-  if (failed(mlir::verify(generator.theModule))) {
-    generator.theModule.emitError("module failed to verify");
+  mlir::MLIRContext context;
+  context.getOrLoadDialect<mlir::StandardOpsDialect>();
+  context.getOrLoadDialect<mlir::calculator::CalculatorDialect>();
+
+  Parser parser = Parser(context);
+  mlir::ModuleOp theModule = parser.parse();
+
+  if (failed(mlir::verify(theModule))) {
+    theModule.emitError("module failed to verify");
     return 1;
   }
 
   // dump MLIR
   // TODO can I dump with loc info?
-  generator.theModule.dump();
+  theModule.dump();
 
   // perform canonicalization
   mlir::PassManager pm1(&context);
@@ -348,31 +226,31 @@ int main(int argc, char **argv) {
   mlir::OpPassManager &optPM = pm1.nest<mlir::FuncOp>();
   optPM.addPass(mlir::createCanonicalizerPass());
 
-  if (mlir::failed(pm1.run(generator.theModule)))
+  if (mlir::failed(pm1.run(theModule)))
     return 1;
 
-  generator.theModule.dump();
+  theModule.dump();
 
   // convert to LLVM IR
   mlir::PassManager pm2(&context);
   pm2.addPass(createLowerToLLVMPass());
 
-  if (mlir::failed(pm2.run(generator.theModule)))
+  if (mlir::failed(pm2.run(theModule)))
     return 1;
 
-  if (failed(mlir::verify(generator.theModule))) {
-    generator.theModule.emitError("(lowered) module failed to verify");
+  if (failed(mlir::verify(theModule))) {
+    theModule.emitError("(lowered) module failed to verify");
     return 1;
   }
 
   // dump (lowered) MLIR
-  generator.theModule.dump();
+  theModule.dump();
 
   // dump LLVM IR
-  dumpLLVMIR(generator.theModule);
+  dumpLLVMIR(theModule);
 
   // run JIT
-  runJit(generator.theModule);
+  runJit(theModule);
 
   return 0;
 }

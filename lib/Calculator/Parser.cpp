@@ -1,4 +1,5 @@
 #include "Calculator/Parser.h"
+#include "mlir/IR/Diagnostics.h"
 
 // the left binding power of a token
 int Parser::lbp(Token t) {
@@ -24,9 +25,9 @@ int Parser::lbp(Token t) {
 
 void Parser::match(Token t) {
   if (t != token) {
-    llvm::errs() << "Expected token " << tokToString(t)
-                 << ", instead encountered token " << tokToString(token)
-                 << "\n";
+    mlir::emitError(getLoc(), "Expected token " + tokToString(t) +
+                                  ", instead encountered token " +
+                                  tokToString(token));
     exit(1);
   }
   token = nextToken();
@@ -50,7 +51,7 @@ mlir::Value Parser::nud(Token t, mlir::Location loc) {
     match(tok_rparen);
     return x;
   default:
-    llvm::errs() << "No prefix handler for token " << tokToString(t) << "\n";
+    mlir::emitError(loc, "No prefix handler for token " + tokToString(t));
     exit(1);
   }
 }
@@ -68,7 +69,7 @@ mlir::Value Parser::led(Token t, mlir::Value left, mlir::Location loc) {
   case tok_pow:
     return generator.builder.create<mlir::PowFOp>(loc, left, expr(29));
   default:
-    llvm::errs() << "No infix handler for token " << tokToString(t) << ".\n";
+    mlir::emitError(loc, "No infix handler for token " + tokToString(t));
     exit(1);
   }
 }

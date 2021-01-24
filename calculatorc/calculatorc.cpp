@@ -9,14 +9,15 @@
 #include "Calculator/Parser.h"
 
 int main(int argc, char **argv) {
-  mlir::registerAsmPrinterCLOptions();
-
+  mlir::registerAsmPrinterCLOptions(); // can control e.g. how MLIR is printed
   llvm::cl::ParseCommandLineOptions(argc, argv, "calculator compiler\n");
 
+  // create a context and load the dialects that we need (std + calculator)
   mlir::MLIRContext context;
   context.getOrLoadDialect<mlir::StandardOpsDialect>();
   context.getOrLoadDialect<mlir::calculator::CalculatorDialect>();
 
+  // parse the math expression from stdin into a module
   Parser parser = Parser(context);
   mlir::ModuleOp theModule = parser.parse();
 
@@ -25,11 +26,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // dump MLIR
-  // TODO can I dump with loc info?
+  // dump MLIR of module
   theModule.dump();
 
-  // perform canonicalization
+  // perform canonicalization pass
   mlir::PassManager pm1(&context);
 
   mlir::OpPassManager &optPM = pm1.nest<mlir::FuncOp>();
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
   theModule.dump();
 
-  // convert to LLVM IR
+  // convert std + calculator to llvm
   mlir::PassManager pm2(&context);
   pm2.addPass(createLowerToLLVMPass());
 
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     return 1;
 
   if (failed(mlir::verify(theModule))) {
-    theModule.emitError("(lowered) module failed to verify");
+    theModule.emitError("(lowered to llvm) module failed to verify");
     return 1;
   }
 
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
   // dump LLVM IR
   dumpLLVMIR(theModule);
 
-  // run JIT
+  // run via LLVM's JIT compiler
   runJit(theModule);
 
   return 0;

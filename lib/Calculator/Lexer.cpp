@@ -3,13 +3,15 @@
 #include "Calculator/Lexer.h"
 
 unsigned int currentLine = 1;
-unsigned int getCurrentLine() { return currentLine; }
+unsigned int Lexer::getCurrentLine() { return currentLine; }
 
-unsigned int lastCol = 1;
-unsigned int currentCol = 1;
-unsigned int getLastCol() { return lastCol; }
+unsigned int lastCol = 0;
+unsigned int currentCol = 0;
+unsigned int Lexer::getLastCol() { return lastCol + 1; }
 
-llvm::StringRef tokToString(Token t) {
+char currentNumStr[64];
+
+llvm::StringRef Lexer::tokToString(Token t) {
   switch (t) {
   case tok_add:
     return "+";
@@ -22,7 +24,7 @@ llvm::StringRef tokToString(Token t) {
   case tok_pow:
     return "^";
   case tok_num:
-    return "[number]";
+    return currentNumStr;
   case tok_lparen:
     return "(";
   case tok_rparen:
@@ -33,13 +35,14 @@ llvm::StringRef tokToString(Token t) {
 }
 
 double currentNum;
-double getCurrentNum() { return currentNum; }
+double Lexer::getCurrentNum() { return currentNum; }
 
-Token nextToken() {
+Token Lexer::nextToken() {
   int charsRead;
   lastCol = currentCol;
-  currentCol++;
-  switch (int c = getchar()) {
+  if (currentCol >= lineLen)
+    return tok_eof;
+  switch (line[currentCol++]) {
   case ' ':
   case '\n':
     return nextToken();
@@ -63,18 +66,18 @@ Token nextToken() {
   case '7':
   case '8':
   case '9':
-    ungetc(c, stdin);
-    scanf("%lf%n", &currentNum, &charsRead);
-    currentCol += charsRead - 1;
+    currentCol--;
+    sscanf(&line[currentCol], "%lf%n", &currentNum, &charsRead);
+    memcpy(currentNumStr, line + currentCol, charsRead);
+    currentNumStr[charsRead] = '\0';
+    currentCol += charsRead;
     return tok_num;
   case '(':
     return tok_lparen;
   case ')':
     return tok_rparen;
-  case EOF:
-    return tok_eof;
   default:
-    llvm::errs() << "Encountered unexpected character '" << (char)c
+    llvm::errs() << "Encountered unexpected character '" << line[currentCol - 1]
                  << "' while lexing.\n";
     exit(1);
   }

@@ -24,13 +24,24 @@ enum Token {
   tok_eof
 };
 
-llvm::StringRef tokToString(Token);
+class Lexer {
+  char *line = NULL;
+  ssize_t lineLen;
 
-unsigned int getCurrentLine();
-unsigned int getLastCol();
+public:
+  Lexer() {
+    size_t lineCap = 0;
+    lineLen = getline(&line, &lineCap, stdin);
+  }
 
-double getCurrentNum();
+  llvm::StringRef tokToString(Token);
 
-Token nextToken();
+  unsigned int getCurrentLine();
+  unsigned int getLastCol();
+
+  double getCurrentNum();
+
+  Token nextToken();
+};
 
 #endif // CALCULATOR_LEXER_H

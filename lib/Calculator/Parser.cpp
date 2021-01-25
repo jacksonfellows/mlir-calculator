@@ -25,17 +25,18 @@ int Parser::lbp(Token t) {
 
 void Parser::match(Token t) {
   if (t != token) {
-    mlir::emitError(getLoc(), "Expected token " + tokToString(t) +
+    mlir::emitError(getLoc(), "Expected token " + lexer.tokToString(t) +
                                   ", instead encountered token " +
-                                  tokToString(token));
+                                  lexer.tokToString(token));
     exit(1);
   }
-  token = nextToken();
+  token = lexer.nextToken();
 }
 
 mlir::Location Parser::getLoc() {
   return generator.builder.getFileLineColLoc(
-      generator.builder.getIdentifier("-"), getCurrentLine(), getLastCol());
+      generator.builder.getIdentifier("-"), lexer.getCurrentLine(),
+      lexer.getLastCol());
 }
 
 mlir::Value Parser::nud(Token t, mlir::Location loc) {
@@ -43,7 +44,8 @@ mlir::Value Parser::nud(Token t, mlir::Location loc) {
   switch (t) {
   case tok_num:
     return generator.builder.create<mlir::ConstantFloatOp>(
-        loc, llvm::APFloat(getCurrentNum()), generator.builder.getF64Type());
+        loc, llvm::APFloat(lexer.getCurrentNum()),
+        generator.builder.getF64Type());
   case tok_sub:
     return generator.builder.create<mlir::NegFOp>(loc, expr(100));
   case tok_lparen:
@@ -51,7 +53,7 @@ mlir::Value Parser::nud(Token t, mlir::Location loc) {
     match(tok_rparen);
     return x;
   default:
-    mlir::emitError(loc, "No prefix handler for token " + tokToString(t));
+    mlir::emitError(loc, "No prefix handler for token " + lexer.tokToString(t));
     exit(1);
   }
 }
@@ -69,7 +71,7 @@ mlir::Value Parser::led(Token t, mlir::Value left, mlir::Location loc) {
   case tok_pow:
     return generator.builder.create<mlir::PowFOp>(loc, left, expr(29));
   default:
-    mlir::emitError(loc, "No infix handler for token " + tokToString(t));
+    mlir::emitError(loc, "No infix handler for token " + lexer.tokToString(t));
     exit(1);
   }
 }
@@ -77,12 +79,12 @@ mlir::Value Parser::led(Token t, mlir::Value left, mlir::Location loc) {
 mlir::Value Parser::expr(int rbp) {
   Token t = token;
   mlir::Location loc = getLoc();
-  token = nextToken();
+  token = lexer.nextToken();
   mlir::Value left = nud(t, loc);
   while (rbp < lbp(token)) {
     t = token;
     mlir::Location loc = getLoc();
-    token = nextToken();
+    token = lexer.nextToken();
 
     left = led(t, left, loc);
   }
@@ -96,7 +98,7 @@ mlir::ModuleOp Parser::parse() {
   mlir::Block &entryBlock = *mainFunc.addEntryBlock();
   generator.builder.setInsertionPointToStart(&entryBlock);
 
-  token = nextToken();
+  token = lexer.nextToken();
   mlir::Value result = expr();
   match(tok_eof); // consume all available input
 

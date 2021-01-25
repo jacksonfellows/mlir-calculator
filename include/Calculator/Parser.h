@@ -12,6 +12,7 @@
 
 class Parser {
   MLIRGenerator generator;
+  Lexer lexer;
 
   Token token;
   mlir::Value expr(int rbp = 0);
@@ -23,7 +24,7 @@ class Parser {
   mlir::Value led(Token, mlir::Value, mlir::Location);
 
 public:
-  Parser(mlir::MLIRContext &context) : generator(context) {}
+  Parser(mlir::MLIRContext &context) : generator(context), lexer() {}
 
   mlir::ModuleOp parse();
 };
